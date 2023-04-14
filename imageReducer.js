@@ -49,7 +49,9 @@ Reduction Algorithm:
 
   async function reduceImage(inputPath, outputPath) {
     const image = await Jimp.read(inputPath);
-    const newImage = new Jimp(128, 128);
+    const newImage = new Jimp(128, 128, (err, image) => {
+      if (err) throw err;
+    });
 
     function maxValuePerRGBChannel(a, b, c, d) {
       return [
