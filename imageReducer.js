@@ -1,81 +1,47 @@
-const Jimp = require('jimp');
-const yargs = require('yargs/yargs');
-const { hideBin } = require('yargs/helpers');
+const fileInput = document.getElementById('file-input');
+const canvas = document.getElementById('reduced-image');
+const ctx = canvas.getContext('2d');
+const saveButton = document.getElementById('save-button');
 
-const argv = yargs(hideBin(process.argv))
-  .option('input', {
-    alias: 'i',
-    type: 'string',
-    description: 'Path to the input image (512x512)'
-  })
-  .option('output', {
-    alias: 'o',
-    type: 'string',
-    description: 'Path to the output image (128x128)'
-  })
-  .option('help', {
-    alias: 'h',
-    type: 'boolean',
-    description: 'Show help'
-  })
-  .argv;
+fileInput.addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
 
-if (argv.help) {
-  console.log(`
-Usage: node imageReducer.js --input <input_path> --output <output_path>
+  const image = new Image();
+  image.src = URL.createObjectURL(file);
+  image.onload = () => {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = image.width;
+    tempCanvas.height = image.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(image, 0, 0);
 
-Options:
-  --input, -i    Path to the input image (512x512)
-  --output, -o   Path to the output image (128x128)
-  --help, -h     Show help
+    for (let y = 0; y < image.height; y += 4) {
+      for (let x = 0; x < image.width; x += 4) {
+        const pixelA = tempCtx.getImageData(x + 1, y, 1, 1);
+        const pixelB = tempCtx.getImageData(x + 2, y, 1, 1);
+        const pixelC = tempCtx.getImageData(x + 1, y + 1, 1, 1);
+        const pixelD = tempCtx.getImageData(x + 2, y + 1, 1, 1);
 
-Reduction Algorithm:
-  The reduction algorithm is based on a 4x4 grid:
-    0123
-    4567
-    89AB
-    CDEF
+        const maxPixel = [
+          Math.max(pixelA.data[0], pixelB.data[0], pixelC.data[0], pixelD.data[0]),
+          Math.max(pixelA.data[1], pixelB.data[1], pixelC.data[1], pixelD.data[1]),
+          Math.max(pixelA.data[2], pixelB.data[2], pixelC.data[2], pixelD.data[2])
+        ];
 
-  The resulting pixel is calculated using the following equation:
-    maxValuePerRGBChannel(5, 6, 9, A)
-
-  This means that for each 4x4 block of pixels in the input image, we take the maximum value
-  of the R, G, and B channels of pixels at positions (1, 1), (2, 1), (1, 2), and (2, 2),
-  and set the corresponding pixel in the output image to these maximum values.
-  `);
-} else {
-  const inputPath = argv.input;
-  const outputPath = argv.output;
-
-  async function reduceImage(inputPath, outputPath) {
-    const image = await Jimp.read(inputPath);
-    const newImage = new Jimp(128, 128, (err, image) => {
-      if (err) throw err;
-    });
-
-    function maxValuePerRGBChannel(a, b, c, d) {
-      return [
-        Math.max(a[0], b[0], c[0], d[0]),
-        Math.max(a[1], b[1], c[1], d[1]),
-        Math.max(a[2], b[2], c[2], d[2])
-      ];
-    }
-
-    for (let y = 0; y < image.bitmap.height; y += 4) {
-      for (let x = 0; x < image.bitmap.width; x += 4) {
-        const pixelA = Jimp.intToRGBA(image.getPixelColor(x + 1, y));
-        const pixelB = Jimp.intToRGBA(image.getPixelColor(x + 2, y));
-        const pixelC = Jimp.intToRGBA(image.getPixelColor(x + 1, y + 2));
-        const pixelD = Jimp.intToRGBA(image.getPixelColor(x + 2, y + 2));
-
-        const reducedPixel = maxValuePerRGBChannel(pixelA, pixelB, pixelC, pixelD);
-        newImage.setPixelColor(Jimp.rgbaToInt(...reducedPixel), x / 4, y / 4);
+        ctx.fillStyle = `rgb(${maxPixel[0]}, ${maxPixel[1]}, ${maxPixel[2]})`;
+        ctx.fillRect(x / 4, y / 4, 1, 1);
       }
     }
 
-    await newImage.writeAsync(outputPath);
-  }
+    canvas.style.display = 'block';
+    saveButton.style.display = 'block';
+  };
+});
 
-  reduceImage(inputPath, outputPath).catch(console.error);
-}
-
+saveButton.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = 'reduced-image.png';
+  link.click();
+});
